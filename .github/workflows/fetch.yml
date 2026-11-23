@@ -2,7 +2,7 @@ name: fetch
 # Every hour, a slice of the WavePulse forecast requests (see fetch.mjs). Free on public repositories.
 on:
   schedule:
-    - cron: '41 * * * *'   # minute 41 (UTC): off the round hour and away from the server's own schedule (minute 17)
+    - cron: '43 * * * *'   # minute 43 (UTC): off the round hour and away from the server's own schedule (minute 17)
   workflow_dispatch:
     inputs:
       hour:
@@ -25,7 +25,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       # GitHub disables scheduled workflows after 60 days without repository activity (docs.github.com, 2026-11-23):
-      # on the 1st of each month, at 04:41 UTC, a one-line commit keeps the repository active.
+      # on the 1st of each month, at 04:43 UTC, a one-line commit keeps the repository active.
       - name: monthly heartbeat
         if: github.event_name == 'schedule'
         run: |
