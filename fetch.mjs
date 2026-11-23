@@ -84,8 +84,12 @@ console.log(`hour ${h}: ${h < plan.sg.length ? 1 : 0} group, ${mine.length} bund
 // once a day (hour 3) one tiny read of a public table. Only if the repository has the two secrets.
 if (h === 3 && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
   try {
-    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/pins?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY } });
-    console.log(`supabase keep-alive: ${r.status}`);
+    // Tolerant to how the URL was pasted: trailing slashes or "/rest/v1" are removed; only the origin is used.
+    const origin = new URL(process.env.SUPABASE_URL.trim()).origin;
+    const r = await fetch(`${origin}/rest/v1/pins?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY.trim() } });
+    // Shape only (never the value): helps to see a wrong URL without printing it.
+    console.log(`supabase keep-alive: ${r.status} (host ends with .supabase.co: ${origin.endsWith('.supabase.co')}, key starts sb_publishable_: ${process.env.SUPABASE_ANON_KEY.trim().startsWith('sb_publishable_')})`);
+    if (!r.ok) console.log(`supabase answer: ${(await r.text()).slice(0, 160)}`);
   } catch (e) { console.log(`supabase keep-alive failed: ${e}`); }
 }
 try {
