@@ -84,7 +84,7 @@ console.log(`hour ${h}: ${h < plan.sg.length ? 1 : 0} group, ${mine.length} bund
 // once a day (hour 3) one tiny read of a public table. Only if the repository has the two secrets.
 if (h === 3 && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
   try {
-    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/pins?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}` } });
+    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/pins?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY } });
     console.log(`supabase keep-alive: ${r.status}`);
   } catch (e) { console.log(`supabase keep-alive failed: ${e}`); }
 }
