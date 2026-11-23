@@ -9,7 +9,7 @@ on:
         description: 'Test: run the slice of this UTC hour (0-23); empty = the current hour'
         required: false
 concurrency: { group: fetch, cancel-in-progress: false }
-permissions: { contents: read }
+permissions: { contents: write }  # write: only for the monthly heartbeat commit below
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -22,3 +22,16 @@ jobs:
         env:
           INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
           FORCE_HOUR: ${{ github.event.inputs.hour }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      # GitHub disables scheduled workflows after 60 days without repository activity (docs.github.com, 2026-11-23):
+      # on the 1st of each month, at 04:41 UTC, a one-line commit keeps the repository active.
+      - name: monthly heartbeat
+        if: github.event_name == 'schedule'
+        run: |
+          if [ "$(date -u +%d%H)" = "0104" ]; then
+            date -u +%Y-%m-%dT%H:%MZ > heartbeat.txt
+            git config user.name "wavepulse-fetcher"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add heartbeat.txt && git commit -m "heartbeat" && git push
+          fi
