@@ -2,9 +2,9 @@
 // Runs every hour on GitHub Actions. It asks Open-Meteo (open-meteo.com, CC BY 4.0) for the requests listed in
 // plan.json and hands the answers to the WavePulse server, in the format the server stores. No dependencies.
 //
-// Each hour (UTC hour h) does a slice, so the whole list is covered once a day within the free daily limit:
-//   - full forecasts of the beaches with index % 24 === h       (~25 beaches)
-//   - every 6 h (h % 6 === 0): the main beaches again           (58)
+// Each hour (UTC hour h) does a slice, so the whole list is covered once a day within the free daily limits:
+//   - the bundles "fcb:h:*": full forecasts of ~25 beaches, stored as bundles of 12 (one storage write per bundle:
+//     the server's free storage allows 1 000 writes a day, 2026-11-23)
 //   - while h < number of groups: group h of short forecasts     (1 group)
 // One request at a time. On "too many requests" it waits a minute once; on the daily limit it stops until next hour.
 //
@@ -45,13 +45,23 @@ async function put(key, body) {
   if (r.ok) stats.stored++; else { stats.failed++; console.log(`store failed ${key}: ${r.status}`); }
 }
 
+// One beach's full forecast, in the server's format; null when Open-Meteo did not give the essential parts.
 async function beach(e) {
   const m = await get(e.marine);
-  if (!m) { stats.failed++; return; }
+  if (!m) { stats.failed++; return null; }
   const w = (await get(e.weather)) ?? (await get(e.weatherGlobal));
-  if (!w) { stats.failed++; return; }
+  if (!w) { stats.failed++; return null; }
   const v = (await get(e.waves)) ?? (await get(e.wavesGlobal));
-  await put(e.key, `{"at":"${new Date().toISOString()}","marine":${m},"weather":${w},"waves":${v ?? 'null'}}`);
+  return `{"at":"${new Date().toISOString()}","marine":${m},"weather":${w},"waves":${v ?? 'null'}}`;
+}
+
+// A bundle: one index line ({"idx":[[key, byteOffset, byteLength], ...]}) then the beaches' bodies back to back.
+async function bundle(b) {
+  const bodies = [];
+  for (const e of b.beaches) { const body = await beach(e); if (body) bodies.push([e.key, Buffer.from(body)]); }
+  if (!bodies.length) return;
+  let off = 0; const idx = bodies.map(([k, buf]) => { const r = [k, off, buf.length]; off += buf.length; return r; });
+  await put(b.key, Buffer.concat([Buffer.from(JSON.stringify({ idx }) + String.fromCharCode(10)), ...bodies.map(([, buf]) => buf)]));
 }
 
 async function group(g) {
@@ -67,9 +77,9 @@ async function group(g) {
 
 const work = [];
 if (h < plan.sg.length) work.push(() => group(plan.sg[h]));
-const beaches = plan.fc.filter((e, i) => i % 24 === h || (h % 6 === 0 && e.main));
-for (const e of beaches) work.push(() => beach(e));
-console.log(`hour ${h}: ${h < plan.sg.length ? 1 : 0} group, ${beaches.length} beaches`);
+const mine = plan.bundles.filter((b) => b.key.startsWith(`fcb:${h}:`));
+for (const b of mine) work.push(() => bundle(b));
+console.log(`hour ${h}: ${h < plan.sg.length ? 1 : 0} group, ${mine.length} bundles, ${mine.reduce((a, b) => a + b.beaches.length, 0)} beaches`);
 try {
   for (const job of work) await job();
 } catch (e) {
