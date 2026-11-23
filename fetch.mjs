@@ -80,6 +80,14 @@ if (h < plan.sg.length) work.push(() => group(plan.sg[h]));
 const mine = plan.bundles.filter((b) => b.key.startsWith(`fcb:${h}:`));
 for (const b of mine) work.push(() => bundle(b));
 console.log(`hour ${h}: ${h < plan.sg.length ? 1 : 0} group, ${mine.length} bundles, ${mine.reduce((a, b) => a + b.beaches.length, 0)} beaches`);
+// Keep the free Supabase project awake (it pauses after 7 days of low activity: supabase.com docs, 2026-11-23):
+// once a day (hour 3) one tiny read of a public table. Only if the repository has the two secrets.
+if (h === 3 && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+  try {
+    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/pins?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}` } });
+    console.log(`supabase keep-alive: ${r.status}`);
+  } catch (e) { console.log(`supabase keep-alive failed: ${e}`); }
+}
 try {
   for (const job of work) await job();
 } catch (e) {
