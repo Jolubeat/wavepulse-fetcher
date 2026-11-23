@@ -1,0 +1,24 @@
+name: fetch
+# Every hour, a slice of the WavePulse forecast requests (see fetch.mjs). Free on public repositories.
+on:
+  schedule:
+    - cron: '41 * * * *'   # minute 41 (UTC): off the round hour and away from the server's own schedule (minute 17)
+  workflow_dispatch:
+    inputs:
+      hour:
+        description: 'Test: run the slice of this UTC hour (0-23); empty = the current hour'
+        required: false
+concurrency: { group: fetch, cancel-in-progress: false }
+permissions: { contents: read }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node fetch.mjs
+        env:
+          INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+          FORCE_HOUR: ${{ github.event.inputs.hour }}
