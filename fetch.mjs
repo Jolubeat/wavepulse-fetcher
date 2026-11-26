@@ -75,11 +75,31 @@ async function group(g) {
   await put(g.key, `{"at":"${new Date().toISOString()}","r":[${answers.join(',')}]}`);
 }
 
+// What to renew (2026-11-27): GitHub ran this "hourly" schedule only ~3 times a day, so a fixed slice per hour left
+// most bundles never renewed. Now each run asks the server how old each bundle/group is and renews the OLDEST ones
+// first (up to MAX_BUNDLES and MAX_GROUPS), whatever hour GitHub runs it. If the server cannot say, the hour's slice.
+const MAX_BUNDLES = 24, MAX_GROUPS = 6, FRESH_MS = 20 * 3600 * 1000;
+let ages = null;
+try {
+  const r = await fetch(`${SERVER}/api/admin/ages`, { headers: { 'X-Ingest-Token': TOKEN || '' } });
+  if (r.ok) ages = await r.json();
+} catch { /* fall back to the hour's slice */ }
 const work = [];
-if (h < plan.sg.length) work.push(() => group(plan.sg[h]));
-const mine = plan.bundles.filter((b) => b.key.startsWith(`fcb:${h}:`));
-for (const b of mine) work.push(() => bundle(b));
-console.log(`hour ${h}: ${h < plan.sg.length ? 1 : 0} group, ${mine.length} bundles, ${mine.reduce((a, b) => a + b.beaches.length, 0)} beaches`);
+let label;
+if (ages && process.env.FORCE_HOUR === undefined || ages && process.env.FORCE_HOUR === '') {
+  const age = (k) => Date.now() - (ages[k] ?? 0);
+  const oldGroups = plan.sg.filter((g) => age(g.key) > FRESH_MS).sort((a, b) => age(b.key) - age(a.key)).slice(0, MAX_GROUPS);
+  const oldBundles = plan.bundles.filter((x) => age(x.key) > FRESH_MS).sort((a, b) => age(b.key) - age(a.key)).slice(0, MAX_BUNDLES);
+  for (const g of oldGroups) work.push(() => group(g));
+  for (const x of oldBundles) work.push(() => bundle(x));
+  label = `oldest first: ${oldGroups.length} groups, ${oldBundles.length} bundles, ${oldBundles.reduce((a, x) => a + x.beaches.length, 0)} beaches`;
+} else {
+  if (h < plan.sg.length) work.push(() => group(plan.sg[h]));
+  const mine = plan.bundles.filter((x) => x.key.startsWith(`fcb:${h}:`));
+  for (const x of mine) work.push(() => bundle(x));
+  label = `hour ${h}: ${h < plan.sg.length ? 1 : 0} group, ${mine.length} bundles, ${mine.reduce((a, x) => a + x.beaches.length, 0)} beaches`;
+}
+console.log(label);
 // Keep the free Supabase project awake (it pauses after 7 days of low activity: supabase.com docs, 2026-11-23):
 // once a day (hour 3) one tiny read of a public table. Only if the repository has the two secrets.
 if (h === 3 && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
