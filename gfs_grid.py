@@ -67,7 +67,7 @@ def fields(b):
 def put(key, obj):
     body = gzip.compress(json.dumps(obj, separators=(",", ":")).encode())
     req = urllib.request.Request(f"{SERVER}/api/ingest/{key}", data=body, method="PUT",
-                                 headers={"X-Ingest-Token": TOKEN, "Content-Type": "application/json"})
+                                 headers={**UA, "X-Ingest-Token": TOKEN, "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=60) as r:
         print("put", key, len(body), "bytes", r.status)
 
